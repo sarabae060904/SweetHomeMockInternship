@@ -18,6 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 package com.eteks.sweethome3d.swing;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.awt.Color;
 import java.awt.Dimension;
@@ -176,6 +178,18 @@ public class HomePrintableComponent extends JComponent implements Printable {
       // No fixed label
       return null;
     }
+  }
+  // Get all viewable levels in their original order
+  private List<Level> getViewableLevels() {
+    List<Level> viewableLevels = new ArrayList<Level>();
+
+    for (Level level : this.home.getLevels()) {
+      if (level.isViewable()) {
+        viewableLevels.add(level);
+      }
+    }
+
+    return viewableLevels;
   }
   
   /**
@@ -351,15 +365,13 @@ public class HomePrintableComponent extends JComponent implements Printable {
           && (homePrint == null
               || homePrint.isPlanPrinted()
               || homePrint.isView3DPrinted())) {
-        final Level selectedLevel = home.getSelectedLevel();
         furnitureTable = (FurnitureTable)furnitureView;
         furnitureFilter = furnitureTable.getFurnitureFilter();
         furnitureTable.setFurnitureFilter(new FurnitureTable.FurnitureFilter() {
             public boolean include(Home home, HomePieceOfFurniture piece) {
               // Print only furniture at selected level when the plan or the 3D view is printed
               return (furnitureFilter == null || furnitureFilter.include(home, piece))
-                  && piece.isAtLevel(selectedLevel)
-                  && (piece.getLevel() == null || piece.getLevel().isViewable());
+                      && (piece.getLevel() == null || piece.getLevel().isViewable());
             }
           });
       } else {
@@ -378,14 +390,28 @@ public class HomePrintableComponent extends JComponent implements Printable {
       }
     }
     if (pageExists == NO_SUCH_PAGE 
-        && planView != null 
-        && (homePrint == null || homePrint.isPlanPrinted())) {
-      // Try to print next plan view page
-      pageExists = ((Printable)planView).print(g2D, pageFormat, page - this.furniturePageCount);
-      if (pageExists == PAGE_EXISTS
-          && !this.printablePages.contains(page)) {
-        this.printablePages.add(page);
-        this.planPageCount++;
+            && planView != null
+            && (homePrint == null || homePrint.isPlanPrinted())) {
+
+      List<Level> viewableLevels = getViewableLevels();
+      int planPageIndex = page - this.furniturePageCount;
+
+      if (planPageIndex >= 0 && planPageIndex < viewableLevels.size()) {
+        Level originalLevel = this.home.getSelectedLevel();
+
+        try {
+          Level levelToPrint = viewableLevels.get(planPageIndex);
+          this.home.setSelectedLevel(levelToPrint);
+          // Try to print next plan view page
+          pageExists = ((Printable) planView).print(g2D, pageFormat, planPageIndex);
+          if (pageExists == PAGE_EXISTS
+                  && !this.printablePages.contains(page)) {
+            this.printablePages.add(page);
+            this.planPageCount++;
+          }
+        } finally {
+          this.home.setSelectedLevel(originalLevel);
+        }
       }
     }
     View view3D = this.controller.getHomeController3D().getView();
